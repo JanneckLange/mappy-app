@@ -90,7 +90,7 @@ struct MapListView: View {
             return
         }
         let trimmedName = newName.trimmingCharacters(in: .whitespacesAndNewlines)
-        renamedMap.name = trimmedName.isEmpty ? "Untitled Map" : trimmedName
+        renamedMap.name = trimmedName.isEmpty ? MappyLocalization.string( "Untitled Map") : trimmedName
         renamedMap.updatedAt = Date()
         try? modelContext.save()
         self.renamedMap = nil

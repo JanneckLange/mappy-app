@@ -7,6 +7,7 @@ struct AddMapAlignmentView: View {
     let image: UIImage?
     @Binding var transform: MapTransform
     @Binding var isEditingOverlay: Bool
+    @Binding var isTwoPointAlignmentPresented: Bool
     let isAutoAligning: Bool
     let autoAlignPreview: AutoAlignResult?
     let autoAlignMessage: String?
@@ -15,7 +16,7 @@ struct AddMapAlignmentView: View {
     let onAutoAlign: () -> Void
     let onApplyAutoAlignPreview: () -> Void
     let onCancelAutoAlignPreview: () -> Void
-    let onManualAlignmentFallback: () -> Void
+    let onApplyTwoPointAlignment: ([ManualAlignmentPair]) -> Void
     let onNameMap: () -> Void
 
     var body: some View {
@@ -40,11 +41,20 @@ struct AddMapAlignmentView: View {
                     onAutoAlign: onAutoAlign,
                     onApplyAutoAlignPreview: onApplyAutoAlignPreview,
                     onCancelAutoAlignPreview: onCancelAutoAlignPreview,
-                    onManualAlignmentFallback: onManualAlignmentFallback,
+                    onTwoPointAlignment: { isTwoPointAlignmentPresented = true },
                     onNameMap: onNameMap
                 )
                 .padding()
                 .background(.regularMaterial)
+            }
+        }
+        .sheet(isPresented: $isTwoPointAlignmentPresented) {
+            if let image {
+                ThreePointAlignmentView(
+                    image: image,
+                    transform: $transform,
+                    onApply: onApplyTwoPointAlignment
+                )
             }
         }
     }

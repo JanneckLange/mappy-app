@@ -33,9 +33,9 @@ final class AutoAlignService {
 
         let message: String
         if match.confidence >= Self.minimumReliableConfidence {
-            message = "Previewing Auto Align result. Apply it if the map looks right."
+            message = MappyLocalization.string( "Previewing Auto Align result. Apply it if the map looks right.")
         } else {
-            message = "Auto Align could not find a confident road or trail match."
+            message = MappyLocalization.string( "Auto Align could not find a confident road or trail match.")
         }
 
         return AutoAlignResult(transform: proposedTransform, confidence: match.confidence, message: message)

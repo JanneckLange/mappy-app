@@ -29,7 +29,7 @@ enum MappyLogic {
             .replacingOccurrences(of: "_", with: " ")
             .replacingOccurrences(of: "-", with: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        return cleanedFallback.isEmpty ? "Untitled Map" : cleanedFallback.capitalized
+        return cleanedFallback.isEmpty ? MappyLocalization.string( "Untitled Map") : cleanedFallback.capitalized
     }
 
     /// Makes a filename/date fallback for imported or captured assets.

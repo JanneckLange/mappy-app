@@ -27,6 +27,7 @@ final class AddMapViewModel {
     var isAutoAligning = false
     var autoAlignPreview: AutoAlignResult?
     var autoAlignMessage: String?
+    var isTwoPointAlignmentPresented = false
     var manualAlignmentStep: ManualAlignmentStep = .inactive
 
     @ObservationIgnored private var locationSeeder = InitialLocationSeeder()
@@ -41,11 +42,11 @@ final class AddMapViewModel {
     }
 
     var navigationTitle: String {
-        editingMap == nil ? "Add Map" : "Edit Map"
+        editingMap == nil ? MappyLocalization.string( "Add Map") : MappyLocalization.string( "Edit Map")
     }
 
     var saveButtonTitle: String {
-        editingMap == nil ? "Save and Open Map" : "Save Changes"
+        editingMap == nil ? MappyLocalization.string( "Save and Open Map") : MappyLocalization.string( "Save Changes")
     }
 
     var canSave: Bool {
@@ -103,10 +104,10 @@ final class AddMapViewModel {
 
         do {
             if let data = try await item.loadTransferable(type: Data.self), let selectedImage = UIImage(data: data) {
-                load(image: selectedImage, filename: "Photo Map")
+                load(image: selectedImage, filename: MappyLocalization.string( "Photo Map"))
             }
         } catch {
-            errorMessage = "Could not import that photo."
+            errorMessage = MappyLocalization.string( "Could not import that photo.")
         }
     }
 
@@ -125,17 +126,17 @@ final class AddMapViewModel {
 
             if fileURL.pathExtension.lowercased() == "pdf" {
                 guard let renderedImage = LocalMapStore.renderFirstPDFPage(from: fileURL) else {
-                    errorMessage = "Could not render the first page of that PDF."
+                    errorMessage = MappyLocalization.string( "Could not render the first page of that PDF.")
                     return
                 }
                 load(image: renderedImage, filename: fileURL.lastPathComponent)
             } else if let importedImage = UIImage(contentsOfFile: fileURL.path) {
                 load(image: importedImage, filename: fileURL.lastPathComponent)
             } else {
-                errorMessage = "That file is not a supported image or PDF."
+                errorMessage = MappyLocalization.string( "That file is not a supported image or PDF.")
             }
         } catch {
-            errorMessage = "Could not import that file."
+            errorMessage = MappyLocalization.string( "Could not import that file.")
         }
     }
 
@@ -166,11 +167,11 @@ final class AddMapViewModel {
     /// Runs local image matching against a MapKit snapshot and previews only reliable alignment results.
     func autoAlign() async {
         guard let image else {
-            errorMessage = "Import a map image before using Auto Align."
+            errorMessage = MappyLocalization.string( "Import a map image before using Auto Align.")
             return
         }
         guard currentLocationCoordinate != nil else {
-            errorMessage = "Mappy needs your current location before Auto Align can compare nearby paths."
+            errorMessage = MappyLocalization.string( "Mappy needs your current location before Auto Align can compare nearby paths.")
             return
         }
 
@@ -187,7 +188,7 @@ final class AddMapViewModel {
                 transform = result.transform
             }
         } catch {
-            autoAlignMessage = "Auto Align could not analyze this map. Try manual alignment."
+            autoAlignMessage = MappyLocalization.string( "Auto Align could not analyze this map. Try manual alignment.")
         }
 
         isAutoAligning = false
@@ -197,7 +198,7 @@ final class AddMapViewModel {
     func applyAutoAlignPreview() {
         autoAlignPreview = nil
         transformBeforeAutoAlignPreview = nil
-        autoAlignMessage = "Auto Align applied."
+        autoAlignMessage = MappyLocalization.string( "Auto Align applied.")
     }
 
     /// Restores the transform from before preview so a bad automatic match never becomes permanent.
@@ -226,7 +227,7 @@ final class AddMapViewModel {
             return
         case .firstImagePoint, .secondImagePoint:
             guard let imagePoint = transform.normalizedOverlayPoint(for: coordinate) else {
-                autoAlignMessage = "Tap inside the image overlay for the image point."
+                autoAlignMessage = MappyLocalization.string( "Tap inside the image overlay for the image point.")
                 return
             }
             pendingManualImagePoint = imagePoint
@@ -257,13 +258,25 @@ final class AddMapViewModel {
             )
             if didAlign {
                 transform = alignedTransform
-                autoAlignMessage = "Two-point alignment applied."
+                autoAlignMessage = MappyLocalization.string( "Two-point alignment applied.")
             } else {
-                autoAlignMessage = "Those points are too close together. Try two points farther apart."
+                autoAlignMessage = MappyLocalization.string( "Those points are too close together. Try two points farther apart.")
             }
             self.pendingManualImagePoint = nil
             self.firstManualAlignmentPair = nil
             manualAlignmentStep = .inactive
+        }
+    }
+
+    /// Applies the modal two-point alignment result after all image/map point pairs are selected.
+    func applyTwoPointAlignment(_ pairs: [ManualAlignmentPair]) {
+        cancelAutoAlignPreview()
+        var alignedTransform = transform
+        if alignedTransform.alignImagePointPairs(pairs) {
+            transform = alignedTransform
+            autoAlignMessage = MappyLocalization.string( "Two-point alignment applied.")
+        } else {
+            autoAlignMessage = MappyLocalization.string( "Those points are too close together. Try two points farther apart.")
         }
     }
 
@@ -280,7 +293,7 @@ final class AddMapViewModel {
 
         do {
             let trimmedName = mapName.trimmingCharacters(in: .whitespacesAndNewlines)
-            let finalName = trimmedName.isEmpty ? "Untitled Map" : trimmedName
+            let finalName = trimmedName.isEmpty ? MappyLocalization.string( "Untitled Map") : trimmedName
 
             if let editingMap {
                 editingMap.name = finalName
@@ -289,11 +302,11 @@ final class AddMapViewModel {
             } else {
                 let filenames = try LocalMapStore.saveImage(
                     image,
-                    originalFilename: sourceFilename ?? "Captured Map"
+                    originalFilename: sourceFilename ?? MappyLocalization.string( "Captured Map")
                 )
                 let savedMap = SavedMap(
                     name: finalName,
-                    originalFilename: sourceFilename ?? "Captured Map",
+                    originalFilename: sourceFilename ?? MappyLocalization.string( "Captured Map"),
                     assetFilename: filenames.assetFilename,
                     thumbnailFilename: filenames.thumbnailFilename,
                     transform: transform
@@ -303,7 +316,7 @@ final class AddMapViewModel {
             }
             return true
         } catch {
-            errorMessage = "Mappy could not save this map locally."
+            errorMessage = MappyLocalization.string( "Mappy could not save this map locally.")
             return false
         }
     }
@@ -328,13 +341,13 @@ enum ManualAlignmentStep: Equatable {
         case .inactive:
             return nil
         case .firstImagePoint:
-            return "Tap a clear point on the image overlay."
+            return MappyLocalization.string( "Tap a clear point on the image overlay.")
         case .firstMapPoint:
-            return "Tap the same point on the real map."
+            return MappyLocalization.string( "Tap the same point on the real map.")
         case .secondImagePoint:
-            return "Tap a second point on the image overlay, far from the first."
+            return MappyLocalization.string( "Tap a second point on the image overlay, far from the first.")
         case .secondMapPoint:
-            return "Tap the matching second point on the real map."
+            return MappyLocalization.string( "Tap the matching second point on the real map.")
         }
     }
 }

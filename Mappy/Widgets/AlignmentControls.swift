@@ -10,7 +10,7 @@ struct AlignmentControls: View {
     let onAutoAlign: () -> Void
     let onApplyAutoAlignPreview: () -> Void
     let onCancelAutoAlignPreview: () -> Void
-    let onManualAlignmentFallback: () -> Void
+    let onTwoPointAlignment: () -> Void
     let onNameMap: () -> Void
 
     var body: some View {
@@ -43,14 +43,14 @@ struct AlignmentControls: View {
             } else if autoAlignPreview != nil {
                 previewControls
             } else {
-                VStack(spacing: 8) {
+                HStack(spacing: 8) {
                     Button(action: onAutoAlign) {
                         Label("Auto Align", systemImage: "sparkles")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
 
-                    Button(action: onManualAlignmentFallback) {
+                    Button(action: onTwoPointAlignment) {
                         Label("Two-Point Align", systemImage: "point.3.connected.trianglepath.dotted")
                             .frame(maxWidth: .infinity)
                     }
@@ -97,8 +97,8 @@ struct AlignmentControls: View {
                 .buttonStyle(.borderedProminent)
             }
 
-            Button(action: onManualAlignmentFallback) {
-                Label("Manual Align", systemImage: "hand.draw")
+            Button(action: onTwoPointAlignment) {
+                Label("Two-Point Align", systemImage: "hand.draw")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)

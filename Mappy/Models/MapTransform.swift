@@ -79,6 +79,20 @@ struct MapTransform: Codable, Equatable {
         }
     }
 
+    /// Converts a normalized image point into the matching real map coordinate using the current transform.
+    func coordinate(forNormalizedOverlayPoint point: CGPoint) -> CLLocationCoordinate2D {
+        let centerPoint = MKMapPoint(coordinate)
+        let pointsPerMeter = MKMapPointsPerMeterAtLatitude(coordinate.latitude)
+        let widthPoints = max(widthMeters * pointsPerMeter, 1)
+        let heightPoints = max(heightMeters * pointsPerMeter, 1)
+        let localX = Double(point.x - 0.5) * widthPoints
+        let localY = Double(point.y - 0.5) * heightPoints
+        let radians = rotationDegrees * .pi / 180
+        let rotatedX = localX * cos(radians) - localY * sin(radians)
+        let rotatedY = localX * sin(radians) + localY * cos(radians)
+        return MKMapPoint(x: centerPoint.x + rotatedX, y: centerPoint.y + rotatedY).coordinate
+    }
+
     /// Converts a map tap into the image's normalized overlay coordinates using the current transform.
     func normalizedOverlayPoint(for coordinate: CLLocationCoordinate2D) -> CGPoint? {
         let centerPoint = MKMapPoint(self.coordinate)
@@ -107,43 +121,83 @@ struct MapTransform: Codable, Equatable {
         _ secondImagePoint: CGPoint,
         to secondMapCoordinate: CLLocationCoordinate2D
     ) -> Bool {
-        let aspectWidth = max(widthMeters, 1)
-        let aspectHeight = max(heightMeters, 1)
-        let imageDeltaX = Double(secondImagePoint.x - firstImagePoint.x) * aspectWidth
-        let imageDeltaY = Double(secondImagePoint.y - firstImagePoint.y) * aspectHeight
-        let imageDistance = hypot(imageDeltaX, imageDeltaY)
-        let firstMapPoint = MKMapPoint(firstMapCoordinate)
-        let secondMapPoint = MKMapPoint(secondMapCoordinate)
-        let mapDeltaX = secondMapPoint.x - firstMapPoint.x
-        let mapDeltaY = secondMapPoint.y - firstMapPoint.y
-        let mapDistancePoints = hypot(mapDeltaX, mapDeltaY)
-        let pointsPerMeter = MKMapPointsPerMeterAtLatitude(firstMapCoordinate.latitude)
-        let mapDistanceMeters = mapDistancePoints / max(pointsPerMeter, 1)
+        alignImagePointPairs([
+            ManualAlignmentPair(imagePoint: firstImagePoint, mapCoordinate: firstMapCoordinate),
+            ManualAlignmentPair(imagePoint: secondImagePoint, mapCoordinate: secondMapCoordinate)
+        ])
+    }
 
-        guard imageDistance > 1, mapDistanceMeters > 1 else {
+    /// Solves a best-fit similarity transform from user-confirmed image/map point pairs.
+    mutating func alignImagePointPairs(_ pairs: [ManualAlignmentPair]) -> Bool {
+        guard pairs.count >= 2 else {
             return false
         }
 
-        let scaleMultiplier = mapDistanceMeters / imageDistance
+        let aspectWidth = max(widthMeters, 1)
+        let aspectHeight = max(heightMeters, 1)
+        let averageLatitude = pairs.map(\.mapCoordinate.latitude).reduce(0, +) / Double(pairs.count)
+        let pointsPerMeter = max(MKMapPointsPerMeterAtLatitude(averageLatitude), 1)
+        let sourcePoints = pairs.map { pair in
+            CGPoint(
+                x: Double(pair.imagePoint.x - 0.5) * aspectWidth,
+                y: Double(pair.imagePoint.y - 0.5) * aspectHeight
+            )
+        }
+        let targetPoints = pairs.map { pair in
+            let mapPoint = MKMapPoint(pair.mapCoordinate)
+            return CGPoint(x: mapPoint.x, y: mapPoint.y)
+        }
+        let sourceCentroid = sourcePoints.centroid
+        let targetCentroid = targetPoints.centroid
+        var numeratorA = 0.0
+        var numeratorB = 0.0
+        var denominator = 0.0
+
+        for index in sourcePoints.indices {
+            let sourceX = sourcePoints[index].x - sourceCentroid.x
+            let sourceY = sourcePoints[index].y - sourceCentroid.y
+            let targetX = targetPoints[index].x - targetCentroid.x
+            let targetY = targetPoints[index].y - targetCentroid.y
+            numeratorA += sourceX * targetX + sourceY * targetY
+            numeratorB += sourceX * targetY - sourceY * targetX
+            denominator += sourceX * sourceX + sourceY * sourceY
+        }
+
+        guard denominator > 1 else {
+            return false
+        }
+
+        let a = numeratorA / denominator
+        let b = numeratorB / denominator
+        let scaleMultiplier = hypot(a, b) / pointsPerMeter
+        guard scaleMultiplier.isFinite, scaleMultiplier > 0 else {
+            return false
+        }
+
         widthMeters = min(max(aspectWidth * scaleMultiplier, 20), 200_000)
         heightMeters = min(max(aspectHeight * scaleMultiplier, 20), 200_000)
-
-        let sourceAngle = atan2(imageDeltaY, imageDeltaX)
-        let targetAngle = atan2(mapDeltaY, mapDeltaX)
-        rotationDegrees = ((targetAngle - sourceAngle) * 180 / .pi).truncatingRemainder(dividingBy: 360)
+        rotationDegrees = atan2(b, a) * 180 / .pi
         if rotationDegrees < 0 {
             rotationDegrees += 360
         }
 
-        let newPointsPerMeter = MKMapPointsPerMeterAtLatitude(firstMapCoordinate.latitude)
-        let firstLocalX = Double(firstImagePoint.x - 0.5) * widthMeters * newPointsPerMeter
-        let firstLocalY = Double(firstImagePoint.y - 0.5) * heightMeters * newPointsPerMeter
-        let radians = rotationDegrees * .pi / 180
-        let rotatedLocalX = firstLocalX * cos(radians) - firstLocalY * sin(radians)
-        let rotatedLocalY = firstLocalX * sin(radians) + firstLocalY * cos(radians)
-        let centerPoint = MKMapPoint(x: firstMapPoint.x - rotatedLocalX, y: firstMapPoint.y - rotatedLocalY)
+        let centerX = targetCentroid.x - a * sourceCentroid.x + b * sourceCentroid.y
+        let centerY = targetCentroid.y - b * sourceCentroid.x - a * sourceCentroid.y
+        let centerPoint = MKMapPoint(x: centerX, y: centerY)
         centerLatitude = centerPoint.coordinate.latitude
         centerLongitude = centerPoint.coordinate.longitude
         return true
+    }
+}
+
+private extension Array where Element == CGPoint {
+    var centroid: CGPoint {
+        guard !isEmpty else {
+            return .zero
+        }
+        let total = reduce(CGPoint.zero) { partialResult, point in
+            CGPoint(x: partialResult.x + point.x, y: partialResult.y + point.y)
+        }
+        return CGPoint(x: total.x / Double(count), y: total.y / Double(count))
     }
 }

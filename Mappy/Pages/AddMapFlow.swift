@@ -29,6 +29,7 @@ struct AddMapFlow: View {
                     image: viewModel.image,
                     transform: $viewModel.transform,
                     isEditingOverlay: $viewModel.isEditingOverlay,
+                    isTwoPointAlignmentPresented: $viewModel.isTwoPointAlignmentPresented,
                     isAutoAligning: viewModel.isAutoAligning,
                     autoAlignPreview: viewModel.autoAlignPreview,
                     autoAlignMessage: viewModel.autoAlignMessage,
@@ -41,7 +42,7 @@ struct AddMapFlow: View {
                     },
                     onApplyAutoAlignPreview: viewModel.applyAutoAlignPreview,
                     onCancelAutoAlignPreview: viewModel.cancelAutoAlignPreview,
-                    onManualAlignmentFallback: viewModel.startManualAlignmentFallback,
+                    onApplyTwoPointAlignment: viewModel.applyTwoPointAlignment,
                     onNameMap: { viewModel.stage = .name }
                 )
             case .name:
