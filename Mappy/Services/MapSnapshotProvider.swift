@@ -12,7 +12,7 @@ final class MapSnapshotProvider {
             longitudinalMeters: regionMeters.widthMeters
         )
         options.size = size
-        options.scale = UIScreen.main.scale
+        options.scale = 2
         options.mapType = .standard
         options.showsBuildings = false
         options.pointOfInterestFilter = .excludingAll

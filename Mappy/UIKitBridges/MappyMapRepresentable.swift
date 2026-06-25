@@ -11,6 +11,7 @@ struct MappyMapRepresentable: UIViewRepresentable {
     var showsUserLocation: Bool
     var centersOnUserLocationInitially: Bool
     var onInitialUserLocation: ((CLLocationCoordinate2D) -> Void)? = nil
+    var onMapTap: ((CLLocationCoordinate2D) -> Void)? = nil
 
     func makeUIView(context: Context) -> MKMapView {
         let mapView = MKMapView()
@@ -25,7 +26,9 @@ struct MappyMapRepresentable: UIViewRepresentable {
         )
         context.coordinator.centersOnUserLocationInitially = centersOnUserLocationInitially
         context.coordinator.onInitialUserLocation = onInitialUserLocation
+        context.coordinator.onMapTap = onMapTap
         context.coordinator.configureOverlayGestures(on: mapView, isEditingOverlay: isEditingOverlay)
+        context.coordinator.configureTapGesture(on: mapView)
         context.coordinator.configureLocation(for: mapView, enabled: showsUserLocation)
         context.coordinator.updateOverlay(on: mapView, image: image, transform: transform)
         return mapView
@@ -35,7 +38,9 @@ struct MappyMapRepresentable: UIViewRepresentable {
         mapView.showsUserLocation = showsUserLocation
         context.coordinator.centersOnUserLocationInitially = centersOnUserLocationInitially
         context.coordinator.onInitialUserLocation = onInitialUserLocation
+        context.coordinator.onMapTap = onMapTap
         context.coordinator.configureOverlayGestures(on: mapView, isEditingOverlay: isEditingOverlay)
+        context.coordinator.configureTapGesture(on: mapView)
         context.coordinator.updateOverlay(on: mapView, image: image, transform: transform)
         mapView.isScrollEnabled = !isEditingOverlay
         mapView.isZoomEnabled = !isEditingOverlay
@@ -56,9 +61,11 @@ struct MappyMapRepresentable: UIViewRepresentable {
         private weak var mapView: MKMapView?
         private lazy var overlayPanGesture = UIPanGestureRecognizer(target: self, action: #selector(handleOverlayPan(_:)))
         private lazy var overlayPinchGesture = UIPinchGestureRecognizer(target: self, action: #selector(handleOverlayPinch(_:)))
+        private lazy var mapTapGesture = UITapGestureRecognizer(target: self, action: #selector(handleMapTap(_:)))
         private var previousDragCoordinate: CLLocationCoordinate2D?
         var centersOnUserLocationInitially = false
         var onInitialUserLocation: ((CLLocationCoordinate2D) -> Void)?
+        var onMapTap: ((CLLocationCoordinate2D) -> Void)?
         private var didUseInitialLocation = false
 
         init(transform: Binding<MapTransform>) {
@@ -88,6 +95,15 @@ struct MappyMapRepresentable: UIViewRepresentable {
             }
         }
 
+        /// Installs a passive tap recognizer for guided two-point alignment.
+        func configureTapGesture(on mapView: MKMapView) {
+            self.mapView = mapView
+            if mapTapGesture.view == nil {
+                mapTapGesture.cancelsTouchesInView = false
+                mapView.addGestureRecognizer(mapTapGesture)
+            }
+        }
+
         /// Requests foreground location access only when the map actually wants to show the blue dot.
         func configureLocation(for mapView: MKMapView, enabled: Bool) {
             self.mapView = mapView
@@ -103,6 +119,16 @@ struct MappyMapRepresentable: UIViewRepresentable {
             default:
                 break
             }
+        }
+
+        /// Sends tap locations back to SwiftUI as map coordinates for guided alignment.
+        @objc private func handleMapTap(_ recognizer: UITapGestureRecognizer) {
+            guard recognizer.state == .ended, let mapView, let onMapTap else {
+                return
+            }
+
+            let point = recognizer.location(in: mapView)
+            onMapTap(mapView.convert(point, toCoordinateFrom: mapView))
         }
 
         /// Converts a one-finger pan into a real map-space translation so the image stays under the finger.

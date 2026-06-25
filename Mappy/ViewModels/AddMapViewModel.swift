@@ -27,10 +27,13 @@ final class AddMapViewModel {
     var isAutoAligning = false
     var autoAlignPreview: AutoAlignResult?
     var autoAlignMessage: String?
+    var manualAlignmentStep: ManualAlignmentStep = .inactive
 
     @ObservationIgnored private var locationSeeder = InitialLocationSeeder()
     @ObservationIgnored private var autoAlignService = AutoAlignService()
     @ObservationIgnored private var transformBeforeAutoAlignPreview: MapTransform?
+    @ObservationIgnored private var pendingManualImagePoint: CGPoint?
+    @ObservationIgnored private var firstManualAlignmentPair: ManualAlignmentPair?
     @ObservationIgnored private var hasStarted = false
 
     init(editingMap: SavedMap?) {
@@ -206,11 +209,62 @@ final class AddMapViewModel {
         transformBeforeAutoAlignPreview = nil
     }
 
-    /// Gives the user a clear fallback path when local line matching is not confident enough.
+    /// Starts a guided two-point fallback for maps that automatic line matching cannot confidently align.
     func startManualAlignmentFallback() {
         cancelAutoAlignPreview()
-        isEditingOverlay = true
-        autoAlignMessage = "Manual mode is active. Drag, pinch, rotate, or use the arrow controls to align the image."
+        isEditingOverlay = false
+        pendingManualImagePoint = nil
+        firstManualAlignmentPair = nil
+        manualAlignmentStep = .firstImagePoint
+        autoAlignMessage = manualAlignmentStep.instruction
+    }
+
+    /// Advances the two-point alignment flow using taps from the map bridge.
+    func handleAlignmentTap(_ coordinate: CLLocationCoordinate2D) {
+        switch manualAlignmentStep {
+        case .inactive:
+            return
+        case .firstImagePoint, .secondImagePoint:
+            guard let imagePoint = transform.normalizedOverlayPoint(for: coordinate) else {
+                autoAlignMessage = "Tap inside the image overlay for the image point."
+                return
+            }
+            pendingManualImagePoint = imagePoint
+            manualAlignmentStep = manualAlignmentStep == .firstImagePoint ? .firstMapPoint : .secondMapPoint
+            autoAlignMessage = manualAlignmentStep.instruction
+        case .firstMapPoint:
+            guard let pendingManualImagePoint else {
+                manualAlignmentStep = .firstImagePoint
+                autoAlignMessage = manualAlignmentStep.instruction
+                return
+            }
+            firstManualAlignmentPair = ManualAlignmentPair(imagePoint: pendingManualImagePoint, mapCoordinate: coordinate)
+            self.pendingManualImagePoint = nil
+            manualAlignmentStep = .secondImagePoint
+            autoAlignMessage = manualAlignmentStep.instruction
+        case .secondMapPoint:
+            guard let pendingManualImagePoint, let firstManualAlignmentPair else {
+                manualAlignmentStep = .firstImagePoint
+                autoAlignMessage = manualAlignmentStep.instruction
+                return
+            }
+            var alignedTransform = transform
+            let didAlign = alignedTransform.alignImagePoints(
+                firstManualAlignmentPair.imagePoint,
+                to: firstManualAlignmentPair.mapCoordinate,
+                pendingManualImagePoint,
+                to: coordinate
+            )
+            if didAlign {
+                transform = alignedTransform
+                autoAlignMessage = "Two-point alignment applied."
+            } else {
+                autoAlignMessage = "Those points are too close together. Try two points farther apart."
+            }
+            self.pendingManualImagePoint = nil
+            self.firstManualAlignmentPair = nil
+            manualAlignmentStep = .inactive
+        }
     }
 
     /// Selects an OCR hint as the final map name.
@@ -259,4 +313,34 @@ enum AddMapStage {
     case source
     case align
     case name
+}
+
+/// Guides the four taps needed to align two image points with two real map points.
+enum ManualAlignmentStep: Equatable {
+    case inactive
+    case firstImagePoint
+    case firstMapPoint
+    case secondImagePoint
+    case secondMapPoint
+
+    var instruction: String? {
+        switch self {
+        case .inactive:
+            return nil
+        case .firstImagePoint:
+            return "Tap a clear point on the image overlay."
+        case .firstMapPoint:
+            return "Tap the same point on the real map."
+        case .secondImagePoint:
+            return "Tap a second point on the image overlay, far from the first."
+        case .secondMapPoint:
+            return "Tap the matching second point on the real map."
+        }
+    }
+}
+
+/// Stores one user-confirmed correspondence between the imported image and the real map.
+struct ManualAlignmentPair {
+    let imagePoint: CGPoint
+    let mapCoordinate: CLLocationCoordinate2D
 }

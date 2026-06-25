@@ -43,11 +43,19 @@ struct AlignmentControls: View {
             } else if autoAlignPreview != nil {
                 previewControls
             } else {
-                Button(action: onAutoAlign) {
-                    Label("Auto Align", systemImage: "sparkles")
-                        .frame(maxWidth: .infinity)
+                VStack(spacing: 8) {
+                    Button(action: onAutoAlign) {
+                        Label("Auto Align", systemImage: "sparkles")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+
+                    Button(action: onManualAlignmentFallback) {
+                        Label("Two-Point Align", systemImage: "point.3.connected.trianglepath.dotted")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
                 }
-                .buttonStyle(.borderedProminent)
             }
 
             if let autoAlignMessage {

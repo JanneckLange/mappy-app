@@ -1,3 +1,4 @@
+import CoreGraphics
 import CoreLocation
 import MapKit
 
@@ -76,5 +77,73 @@ struct MapTransform: Codable, Equatable {
         if rotationDegrees < 0 {
             rotationDegrees += 360
         }
+    }
+
+    /// Converts a map tap into the image's normalized overlay coordinates using the current transform.
+    func normalizedOverlayPoint(for coordinate: CLLocationCoordinate2D) -> CGPoint? {
+        let centerPoint = MKMapPoint(self.coordinate)
+        let tapPoint = MKMapPoint(coordinate)
+        let pointsPerMeter = MKMapPointsPerMeterAtLatitude(self.coordinate.latitude)
+        let widthPoints = max(widthMeters * pointsPerMeter, 1)
+        let heightPoints = max(heightMeters * pointsPerMeter, 1)
+        let radians = rotationDegrees * .pi / 180
+        let deltaX = tapPoint.x - centerPoint.x
+        let deltaY = tapPoint.y - centerPoint.y
+        let localX = deltaX * cos(radians) + deltaY * sin(radians)
+        let localY = -deltaX * sin(radians) + deltaY * cos(radians)
+        let normalizedX = localX / widthPoints + 0.5
+        let normalizedY = localY / heightPoints + 0.5
+
+        guard normalizedX >= 0, normalizedX <= 1, normalizedY >= 0, normalizedY <= 1 else {
+            return nil
+        }
+        return CGPoint(x: normalizedX, y: normalizedY)
+    }
+
+    /// Solves center, scale, and rotation from two image points and their matching real map coordinates.
+    mutating func alignImagePoints(
+        _ firstImagePoint: CGPoint,
+        to firstMapCoordinate: CLLocationCoordinate2D,
+        _ secondImagePoint: CGPoint,
+        to secondMapCoordinate: CLLocationCoordinate2D
+    ) -> Bool {
+        let aspectWidth = max(widthMeters, 1)
+        let aspectHeight = max(heightMeters, 1)
+        let imageDeltaX = Double(secondImagePoint.x - firstImagePoint.x) * aspectWidth
+        let imageDeltaY = Double(secondImagePoint.y - firstImagePoint.y) * aspectHeight
+        let imageDistance = hypot(imageDeltaX, imageDeltaY)
+        let firstMapPoint = MKMapPoint(firstMapCoordinate)
+        let secondMapPoint = MKMapPoint(secondMapCoordinate)
+        let mapDeltaX = secondMapPoint.x - firstMapPoint.x
+        let mapDeltaY = secondMapPoint.y - firstMapPoint.y
+        let mapDistancePoints = hypot(mapDeltaX, mapDeltaY)
+        let pointsPerMeter = MKMapPointsPerMeterAtLatitude(firstMapCoordinate.latitude)
+        let mapDistanceMeters = mapDistancePoints / max(pointsPerMeter, 1)
+
+        guard imageDistance > 1, mapDistanceMeters > 1 else {
+            return false
+        }
+
+        let scaleMultiplier = mapDistanceMeters / imageDistance
+        widthMeters = min(max(aspectWidth * scaleMultiplier, 20), 200_000)
+        heightMeters = min(max(aspectHeight * scaleMultiplier, 20), 200_000)
+
+        let sourceAngle = atan2(imageDeltaY, imageDeltaX)
+        let targetAngle = atan2(mapDeltaY, mapDeltaX)
+        rotationDegrees = ((targetAngle - sourceAngle) * 180 / .pi).truncatingRemainder(dividingBy: 360)
+        if rotationDegrees < 0 {
+            rotationDegrees += 360
+        }
+
+        let newPointsPerMeter = MKMapPointsPerMeterAtLatitude(firstMapCoordinate.latitude)
+        let firstLocalX = Double(firstImagePoint.x - 0.5) * widthMeters * newPointsPerMeter
+        let firstLocalY = Double(firstImagePoint.y - 0.5) * heightMeters * newPointsPerMeter
+        let radians = rotationDegrees * .pi / 180
+        let rotatedLocalX = firstLocalX * cos(radians) - firstLocalY * sin(radians)
+        let rotatedLocalY = firstLocalX * sin(radians) + firstLocalY * cos(radians)
+        let centerPoint = MKMapPoint(x: firstMapPoint.x - rotatedLocalX, y: firstMapPoint.y - rotatedLocalY)
+        centerLatitude = centerPoint.coordinate.latitude
+        centerLongitude = centerPoint.coordinate.longitude
+        return true
     }
 }

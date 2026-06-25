@@ -33,6 +33,7 @@ struct AddMapFlow: View {
                     autoAlignPreview: viewModel.autoAlignPreview,
                     autoAlignMessage: viewModel.autoAlignMessage,
                     onInitialUserLocation: viewModel.handleInitialUserLocation,
+                    onMapTap: viewModel.handleAlignmentTap,
                     onAutoAlign: {
                         Task {
                             await viewModel.autoAlign()

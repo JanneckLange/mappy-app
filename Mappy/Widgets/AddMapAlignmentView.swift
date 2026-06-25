@@ -11,6 +11,7 @@ struct AddMapAlignmentView: View {
     let autoAlignPreview: AutoAlignResult?
     let autoAlignMessage: String?
     let onInitialUserLocation: (CLLocationCoordinate2D) -> Void
+    let onMapTap: (CLLocationCoordinate2D) -> Void
     let onAutoAlign: () -> Void
     let onApplyAutoAlignPreview: () -> Void
     let onCancelAutoAlignPreview: () -> Void
@@ -26,7 +27,8 @@ struct AddMapAlignmentView: View {
                     isEditingOverlay: isEditingOverlay,
                     showsUserLocation: true,
                     centersOnUserLocationInitially: true,
-                    onInitialUserLocation: onInitialUserLocation
+                    onInitialUserLocation: onInitialUserLocation,
+                    onMapTap: onMapTap
                 )
 
                 AlignmentControls(
